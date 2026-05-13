@@ -25,7 +25,8 @@ An AI-based Weather Forecast Application made using Python, Tkinter, WeatherAPI 
 - PIL
 
 ## 📷 Screenshots
-
+[WEATHER APP SOME SCREENSHOTS]
+https://github.com/Ujjwalraj1808/AI-Weather-Forecast-App/blob/main/Screenshot%202026-05-13%20230825.png?raw=true
 
 ## ▶ How to Run
 
