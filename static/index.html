@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weather Forecast</title>
+  <meta name="description" content="Live weather, hourly and multi-day forecasts, with an experimental ML rain estimate.">
+  <link rel="preload" href="/static/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-scene="default">
+  <div class="sky" aria-hidden="true">
+    <div class="scene" data-scene="default"></div>
+    <div class="scene" data-scene="clear-day"></div>
+    <div class="scene" data-scene="clear-night"></div>
+    <div class="scene" data-scene="golden"></div>
+    <div class="scene" data-scene="cloudy-day"></div>
+    <div class="scene" data-scene="cloudy-night"></div>
+    <div class="scene" data-scene="rain"></div>
+    <div class="scene" data-scene="storm"></div>
+    <div class="scene" data-scene="snow"></div>
+    <div class="scene" data-scene="fog"></div>
+    <div class="sky-photo"></div>
+    <div class="sky-shade"></div>
+  </div>
+
+  <div class="page">
+    <header class="topbar">
+      <form id="search" class="search" role="search" autocomplete="off">
+        <label for="city" class="sr-only">City</label>
+        <div class="combo">
+          <input id="city" type="text" placeholder="Search a city, e.g. Delhi, India"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="suggestions" spellcheck="false">
+          <ul id="suggestions" class="suggestions" role="listbox" aria-label="Matching places" hidden></ul>
+        </div>
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <button id="locate" type="button" class="btn btn-ghost">Use my location</button>
+    </header>
+
+    <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+
+    <section id="choices" class="panel choices" aria-labelledby="choices-title" hidden>
+      <h2 id="choices-title"></h2>
+      <ul id="choice-list" class="choice-list"></ul>
+    </section>
+
+    <section id="empty" class="empty">
+      <h1>What's the sky doing?</h1>
+      <p>Search a city or use your location to see live conditions, the next 24 hours and the days ahead.</p>
+    </section>
+
+    <main id="dashboard" class="dashboard" hidden>
+      <section class="hero" aria-labelledby="place">
+        <h1 id="place"></h1>
+        <p id="place-sub" class="place-sub"></p>
+        <p id="localtime" class="localtime"></p>
+        <div class="now">
+          <p class="temp"><span id="temp"></span><span class="unit">°C</span></p>
+          <div class="now-detail">
+            <img id="icon" class="icon" width="64" height="64" alt="">
+            <p id="condition" class="condition"></p>
+            <p id="feels" class="feels"></p>
+          </div>
+        </div>
+        <p id="summary" class="summary"></p>
+        <a id="map" class="map-link" target="_blank" rel="noopener">Open in Google Maps</a>
+      </section>
+
+      <section class="panel hourly" aria-labelledby="hourly-title">
+        <h2 id="hourly-title">Next 24 hours</h2>
+        <ol id="hours" class="hours" tabindex="0" aria-label="Hourly forecast, scrollable"></ol>
+      </section>
+
+      <section class="panel details" aria-labelledby="details-title">
+        <h2 id="details-title">Right now</h2>
+        <dl class="stats">
+          <div><dt>Humidity</dt><dd id="humidity"></dd></div>
+          <div><dt>Wind</dt><dd id="wind"></dd></div>
+          <div><dt>Chance of rain today</dt><dd id="rain-today"></dd></div>
+          <div><dt>Sunrise</dt><dd id="sunrise"></dd></div>
+          <div><dt>Sunset</dt><dd id="sunset"></dd></div>
+        </dl>
+      </section>
+
+      <section class="panel ml" aria-labelledby="ml-title">
+        <h2 id="ml-title">Model estimate for tomorrow</h2>
+        <p id="prediction" class="prediction"></p>
+        <p class="ml-note">Experimental. A small decision tree trained on sample data, using today's humidity and wind. It is not a forecast; use the chance of rain from WeatherAPI for planning.</p>
+      </section>
+
+      <section class="panel days" aria-labelledby="days-title">
+        <h2 id="days-title">Forecast</h2>
+        <ol id="days" class="day-list"></ol>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Weather data from <a href="https://www.weatherapi.com/" target="_blank" rel="noopener">WeatherAPI.com</a>
+    </footer>
+  </div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
