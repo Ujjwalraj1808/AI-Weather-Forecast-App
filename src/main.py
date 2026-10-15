@@ -5,6 +5,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.metrics import metrics_response, track_requests
 from src.model.predict import load_model, predict_rain
 from src.weather import (
     AmbiguousLocationError,
@@ -31,6 +32,7 @@ SCENE_IMAGE_EXTENSIONS = (".webp", ".jpg")
 
 app = FastAPI(title="Weather Forecast API", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.middleware("http")(track_requests)
 
 
 @app.exception_handler(CityNotFoundError)
@@ -66,6 +68,11 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    return metrics_response()
 
 
 @app.get("/search")
