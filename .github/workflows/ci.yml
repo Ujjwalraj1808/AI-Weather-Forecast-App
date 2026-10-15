@@ -12,12 +12,13 @@ concurrency:
 permissions:
   contents: read
 
+# Actions are pinned to full commit SHAs (tag in the comment); Dependabot keeps them current.
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - run: pip install ruff==0.17.0
@@ -27,14 +28,18 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: pytest
+      - name: Check dependencies for known vulnerabilities
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit -r requirements.txt
 
   build:
     needs: test
@@ -45,32 +50,46 @@ jobs:
     env:
       PUSH_IMAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Image name (GHCR needs lowercase)
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to GHCR
-        if: env.PUSH_IMAGE == 'true'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Builds on every run; pushes only on push to main.
-      - uses: docker/build-push-action@v7
+      # Builds the image (downloads training data, trains and quality-checks the model)
+      # and loads it into the local Docker engine for scanning.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          push: ${{ env.PUSH_IMAGE == 'true' }}
+          load: true
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities (Trivy)
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.75.0 image
+          --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --no-progress
+          "${{ steps.image.outputs.name }}:${{ github.sha }}"
+
+      - name: Log in to GHCR
+        if: env.PUSH_IMAGE == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image (main only)
+        if: env.PUSH_IMAGE == 'true'
+        run: |
+          docker push "${{ steps.image.outputs.name }}:${{ github.sha }}"
+          docker push "${{ steps.image.outputs.name }}:latest"
 
   deploy:
     needs: [lint, test, build]
