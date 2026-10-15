@@ -197,10 +197,12 @@ docker-compose.yml       Local run, reads .env
 
 ## Original desktop version
 
-The project began as a Tkinter desktop app (packaged as an .exe). Screenshots of that version:
+The project began as a Tkinter desktop app (packaged as an .exe). Screenshots of that version are in [`docs/screenshots/`](docs/screenshots/):
 
-- [Desktop app, screenshot 1](Screenshot%202026-05-13%20230825.png)
-- [Desktop app, screenshot 2](Screenshot%202026-05-13%20230944.png)
+| | |
+|---|---|
+| ![Desktop app 1](docs/screenshots/desktop-app-1.png) | ![Desktop app 2](docs/screenshots/desktop-app-2.png) |
+| ![Desktop app 3](docs/screenshots/desktop-app-3.png) | ![Desktop app 4](docs/screenshots/desktop-app-4.png) |
 
 ## Developed by
 

@@ -12,6 +12,6 @@ tests/
 *.png
 *.ico
 *.spec
-CLAUDE.md
 README.md
 docker-compose.yml
+docs/
