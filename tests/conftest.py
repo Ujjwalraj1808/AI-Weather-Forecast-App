@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.main
+from src.ratelimit import limiter
 from src.weather import client as weather_client
 
 DELHI_CA = {"id": 313868, "name": "Delhi", "region": "Ontario", "country": "Canada", "lat": 42.85, "lon": -80.5}
@@ -75,6 +76,8 @@ def make_payload(days=3, code=1183, is_day=1, localtime="2026-10-15 10:00"):
             "feelslike_c": 10.5,
             "humidity": 82,
             "wind_kph": 14.4,
+            "pressure_mb": 1004.0,
+            "cloud": 90,
             "is_day": is_day,
             "condition": {"text": "Light rain", "code": code, "icon": "//cdn.weatherapi.com/weather/64x64/day/296.png"},
         },
@@ -104,10 +107,23 @@ def fake_search(query):
 
 
 class FakeModel:
-    """Predicts rain when humidity > 75."""
+    """Rain probability 0.8 when humidity > 75, else 0.2."""
 
-    def predict(self, rows):
-        return [1 if h > 75 else 0 for h in rows["Humidity"]]
+    def predict_proba(self, rows):
+        return [[0.2, 0.8] if h > 75 else [0.8, 0.2] for h in rows["humidity"]]
+
+
+FAKE_MODEL_INFO = {"model": "RandomForestClassifier", "metrics": {"roc_auc": 0.8}}
+
+
+@pytest.fixture(autouse=True)
+def fresh_state():
+    """Caches and rate-limit counters must not leak between tests."""
+    weather_client.clear_caches()
+    limiter.reset()
+    yield
+    weather_client.clear_caches()
+    limiter.reset()
 
 
 @pytest.fixture
@@ -128,5 +144,6 @@ def fetch_calls(monkeypatch):
 @pytest.fixture
 def client(monkeypatch, fetch_calls):
     monkeypatch.setattr(src.main, "load_model", lambda: FakeModel())
+    monkeypatch.setattr(src.main, "load_model_info", lambda: FAKE_MODEL_INFO)
     with TestClient(src.main.app) as c:
         yield c

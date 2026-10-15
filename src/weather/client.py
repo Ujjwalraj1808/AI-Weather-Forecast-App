@@ -5,10 +5,20 @@ import re
 
 import requests
 
+from src.cache import TTLCache
 from src.weather.scenes import scene_for
 
 BASE_URL = "https://api.weatherapi.com/v1"
 TIMEOUT_SECONDS = 10
+
+# Forecasts change slowly and place lists almost never, so cache both to save WeatherAPI calls.
+_forecast_cache = TTLCache(ttl_seconds=600, max_entries=500)
+_search_cache = TTLCache(ttl_seconds=86_400, max_entries=2_000)
+
+
+def clear_caches():
+    _forecast_cache.clear()
+    _search_cache.clear()
 
 # WeatherAPI error codes: https://www.weatherapi.com/docs/#intro-error-codes
 _KEY_ERRORS = {1002, 2006, 2008, 2009}
@@ -113,8 +123,14 @@ def _location_summary(loc):
 
 
 def search_locations(query):
-    """Autocomplete matches from WeatherAPI's search endpoint."""
-    return [_location_summary(loc) for loc in _request("search.json", {"q": query})]
+    """Autocomplete matches from WeatherAPI's search endpoint (cached for a day)."""
+    key = query.strip().lower()
+    cached = _search_cache.get(key)
+    if cached is not None:
+        return cached
+    results = [_location_summary(loc) for loc in _request("search.json", {"q": query})]
+    _search_cache.set(key, results)
+    return results
 
 
 def _matches_qualifier(qualifier, loc):
@@ -190,8 +206,14 @@ def resolve_query(query):
 
 
 def fetch_forecast(q, days=10):
-    """Raw WeatherAPI forecast payload for an exact `q` (see resolve_query)."""
-    return _request("forecast.json", {"q": q, "days": days})
+    """Raw WeatherAPI forecast payload for an exact `q` (see resolve_query), cached 10 minutes."""
+    key = (q.strip().lower(), days)
+    cached = _forecast_cache.get(key)
+    if cached is not None:
+        return cached
+    data = _request("forecast.json", {"q": q, "days": days})
+    _forecast_cache.set(key, data)
+    return data
 
 
 def get_advice(temp, condition):
@@ -230,6 +252,8 @@ def parse_current(data):
         "feelslike_c": current["feelslike_c"],
         "humidity": current["humidity"],
         "wind_kph": current["wind_kph"],
+        "pressure_mb": current["pressure_mb"],
+        "cloud": current["cloud"],
         "chance_of_rain_today": today["day"]["daily_chance_of_rain"],
         "sunrise": astro["sunrise"],
         "sunset": astro["sunset"],

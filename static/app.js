@@ -185,7 +185,28 @@ function renderDays(days) {
 }
 
 function renderPrediction(p) {
-  $("prediction").textContent = p.rain_expected ? "Rain likely tomorrow" : "No rain expected tomorrow";
+  const percent = Math.round(p.probability * 100);
+  $("prediction").textContent = p.rain_expected
+    ? `Rain likely tomorrow (${percent}%)`
+    : `Rain unlikely tomorrow (${percent}%)`;
+}
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+async function loadModelInfo() {
+  try {
+    const info = await api("/model", {});
+    const m = info.metrics;
+    $("ml-note").textContent =
+      `Random forest trained on ${info.train_samples.toLocaleString()} hourly observations ` +
+      `from ${info.cities.length} cities (Open-Meteo, ${info.data_from} to ${info.data_to}). ` +
+      `On the most recent ${info.test_samples.toLocaleString()} held-out hours it scored ` +
+      `${pct(m.accuracy)} accuracy, ROC AUC ${m.roc_auc.toFixed(2)}, and caught ${pct(m.recall)} of rainy days ` +
+      `(${pct(m.precision)} of its rain calls were right). ` +
+      `It is a separate estimate; use the chance of rain from WeatherAPI for planning.`;
+  } catch {
+    /* keep the static note */
+  }
 }
 
 // ---------- Loading a place ----------
@@ -196,15 +217,12 @@ async function load(q, label) {
   setBusy(true);
   setStatus(`Loading weather for ${label}…`);
   try {
-    const [weather, forecast, prediction] = await Promise.all([
-      api("/weather", { city: q }),
-      api("/forecast", { city: q, days: 10 }),
-      api("/predict-rain", { city: q }),
-    ]);
+    const data = await api("/dashboard", { city: q, days: 10 });
+    const weather = data.current;
     renderCurrent(weather);
-    renderHourly(forecast.hourly);
-    renderDays(forecast.days);
-    renderPrediction(prediction);
+    renderHourly(data.hourly);
+    renderDays(data.days);
+    renderPrediction(data.prediction);
     $("empty").hidden = true;
     dashboard.hidden = false;
     setStatus("");
@@ -394,6 +412,8 @@ $("locate").addEventListener("click", () => {
 $("icon").addEventListener("error", () => $("icon").classList.add("failed"));
 
 // ---------- Start ----------
+
+loadModelInfo();
 
 try {
   const last = JSON.parse(localStorage.getItem(LAST_KEY) || "null");

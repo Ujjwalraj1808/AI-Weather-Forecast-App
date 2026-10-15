@@ -88,7 +88,7 @@
       <section class="panel ml" aria-labelledby="ml-title">
         <h2 id="ml-title">Model estimate for tomorrow</h2>
         <p id="prediction" class="prediction"></p>
-        <p class="ml-note">Experimental. A small decision tree trained on sample data, using today's humidity and wind. It is not a forecast; use the chance of rain from WeatherAPI for planning.</p>
+        <p id="ml-note" class="ml-note">A machine-learning estimate from current humidity, wind, temperature, pressure and cloud cover. It is separate from the forecast; use the chance of rain from WeatherAPI for planning.</p>
       </section>
 
       <section class="panel days" aria-labelledby="days-title">
@@ -98,7 +98,8 @@
     </main>
 
     <footer class="footer">
-      Weather data from <a href="https://www.weatherapi.com/" target="_blank" rel="noopener">WeatherAPI.com</a>
+      Weather data from <a href="https://www.weatherapi.com/" target="_blank" rel="noopener">WeatherAPI.com</a>.
+      Model trained on <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> historical data (CC BY 4.0).
     </footer>
   </div>
   <script src="/static/app.js" defer></script>

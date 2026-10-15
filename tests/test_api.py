@@ -57,12 +57,7 @@ def test_forecast_days_out_of_range(client):
 def test_predict_rain(client):
     r = client.get("/predict-rain", params={"city": "id:50"})
     assert r.status_code == 200
-    assert r.json() == {
-        "location": "Stockholm",
-        "humidity": 82,
-        "wind_kph": 14.4,
-        "rain_expected": True,
-    }
+    assert r.json() == {"location": "Stockholm", "rain_expected": True, "probability": 0.8}
 
 
 def test_search_delhi_lists_india_first(client):
@@ -129,3 +124,32 @@ def test_index_serves_web_ui(client):
     assert '<script src="/static/app.js"' in r.text
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
+
+
+def test_dashboard_uses_one_weatherapi_call(client, fetch_calls):
+    r = client.get("/dashboard", params={"city": "Delhi"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["current"]["location"] == "Stockholm"
+    assert body["current"]["scene"] == "rain"
+    assert len(body["days"]) == 10
+    assert len(body["hourly"]) == 24
+    assert body["prediction"] == {"rain_expected": True, "probability": 0.8}
+    assert fetch_calls == [("id:1112321", 10)]
+
+
+def test_model_info(client):
+    assert client.get("/model").json() == {"model": "RandomForestClassifier", "metrics": {"roc_auc": 0.8}}
+
+
+def test_rate_limit_returns_429_with_retry_after(client, monkeypatch):
+    from src.ratelimit import limiter
+
+    monkeypatch.setattr(limiter, "limit", 3)
+    codes = [client.get("/weather", params={"city": "id:50"}).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+    r = client.get("/weather", params={"city": "id:50"})
+    assert int(r.headers["Retry-After"]) >= 1
+    # Pages and probes are never limited
+    assert client.get("/health").status_code == 200
+    assert client.get("/").status_code == 200

@@ -1,4 +1,4 @@
-# ---- Build stage: install dependencies and train the model ----
+# ---- Build stage: install dependencies, download training data, train the model ----
 FROM python:3.12-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
@@ -13,8 +13,10 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY src/ src/
-COPY weather.csv .
-RUN python -m src.model.train
+# Needs internet: pulls ~2 years of hourly history from Open-Meteo, then trains.
+# The build fails (and nothing deploys) if the data can't be fetched or the
+# model misses the quality bar in src/model/train.py.
+RUN python -m src.model.data && python -m src.model.train
 
 # ---- Runtime stage ----
 FROM python:3.12-slim
@@ -22,14 +24,15 @@ FROM python:3.12-slim
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8000 \
+    FORWARDED_ALLOW_IPS="*"
 
 RUN useradd --create-home --uid 10001 appuser
 
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /app/rain_model.pkl .
+COPY --from=builder /app/rain_model.pkl /app/model_metrics.json ./
 COPY src/ src/
 COPY static/ static/
 
