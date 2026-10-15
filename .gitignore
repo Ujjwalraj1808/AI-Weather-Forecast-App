@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Trained model (build/, dist/ and *.spec are already ignored above)
+rain_model.pkl
