@@ -138,3 +138,14 @@ src/model/             Training and prediction
 static/                index.html, app.js, style.css, fonts/, img/
 tests/                 pytest suite
 ```
+
+## Original desktop version
+
+The project began as a Tkinter desktop app (packaged as an .exe). Screenshots of that version:
+
+- [Desktop app, screenshot 1](Screenshot%202026-05-13%20230825.png)
+- [Desktop app, screenshot 2](Screenshot%202026-05-13%20230944.png)
+
+## Developed by
+
+Ujjwal Raj
