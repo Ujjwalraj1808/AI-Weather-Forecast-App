@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/Ujjwalraj1808/AI-Weather-Forecast-App/actions/workflows/ci.yml/badge.svg)](https://github.com/Ujjwalraj1808/AI-Weather-Forecast-App/actions/workflows/ci.yml)
 
-**Live demo:** https://YOUR-SERVICE.onrender.com <!-- replace after the first Render deploy -->
+**Live demo:** https://ai-weather-forecast-app.onrender.com
+
 
 A containerised FastAPI web app showing live weather from [WeatherAPI.com](https://www.weatherapi.com/):
 current conditions, the next 24 hours, a multi-day forecast and an experimental ML rain estimate.
