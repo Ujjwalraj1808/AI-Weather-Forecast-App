@@ -8,23 +8,24 @@
 A containerised FastAPI web app showing live weather from [WeatherAPI.com](https://www.weatherapi.com/):
 current conditions, the next 24 hours, a multi-day forecast and an experimental ML rain estimate.
 It started as a Tkinter desktop app and was rebuilt as a tested, containerised and continuously deployed web service.
+The rain model is trained from two years of real hourly observations (Open-Meteo) every time the image is built, and its held-out scores are published at `/model`.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U[Browser<br/>static/index.html + app.js] -->|/search /resolve<br/>/weather /forecast /predict-rain| API
+    U[Browser<br/>static/index.html + app.js] -->|/search /resolve<br/>/dashboard /model| RL
 
     subgraph C[Docker container · python:3.12-slim · non-root]
-        API[FastAPI<br/>src/main.py]
-        W[src/weather<br/>client · city choice · scenes]
-        M[src/model<br/>decision tree]
-        PKL[(rain_model.pkl<br/>trained at image build)]
-        API --> W
-        API --> M --> PKL
+        RL[rate limit<br/>60 req/min per IP] --> API[FastAPI<br/>src/main.py]
+        API --> W[src/weather<br/>client · city choice · scenes]
+        W --> CACHE[(TTL cache<br/>forecast 10 min<br/>search 24 h)]
+        API --> M[src/model<br/>random forest]
+        M --> PKL[(rain_model.pkl +<br/>model_metrics.json)]
     end
 
-    W -->|HTTPS · key from WEATHER_API_KEY| WAPI[WeatherAPI.com]
+    CACHE -->|miss · HTTPS · key from WEATHER_API_KEY| WAPI[WeatherAPI.com]
+    OM[Open-Meteo archive<br/>2 years · 12 cities] -.->|at image build| PKL
     P[Prometheus or any scraper] -->|GET /metrics| API
     D[Docker HEALTHCHECK] -->|GET /health| API
 ```
@@ -35,21 +36,22 @@ flowchart LR
 - **Use my location** and **Open in Google Maps** (exact coordinates).
 - **Current weather, a 24-hour strip and a multi-day forecast** with temperature-range bars.
 - **Backgrounds that follow the real sky:** clear day or night, golden hour, cloudy, rain, storm, snow and fog.
-- **Experimental ML estimate** of rain tomorrow, shown apart from WeatherAPI's forecast.
+- **ML rain estimate** for tomorrow with its probability, trained on real historical observations and shown apart from WeatherAPI's forecast, with the model's held-out scores on the page.
 - **Clear errors** for unknown places, invalid keys, quota limits, timeouts and network failures.
 - **Responsive and accessible** from 320px phones to desktops, with keyboard support and reduced motion.
-- **Observability:** `/health` for container health checks and `/metrics` for Prometheus.
+- **Observability:** `/health` for container health checks, `/metrics` for Prometheus, `/model` for model provenance and scores.
+- **Cost control:** one WeatherAPI call per search (`/dashboard`), a 10-minute forecast cache, and a per-IP rate limit.
 
 ## Tech stack
 
 | Area | Tools |
 |---|---|
 | Backend | Python 3.12, FastAPI, Uvicorn, Requests |
-| ML | scikit-learn, pandas, joblib |
+| ML | scikit-learn (random forest), pandas, joblib; training data from Open-Meteo |
 | Front end | Plain HTML, CSS and JavaScript (no frameworks) |
 | Quality | pytest, ruff |
 | Containers | Docker (multi-stage, non-root, HEALTHCHECK), Docker Compose |
-| CI/CD | GitHub Actions, GitHub Container Registry (GHCR), Render |
+| CI/CD | GitHub Actions (SHA-pinned), pip-audit, Trivy, Dependabot, GitHub Container Registry (GHCR), Render |
 | Monitoring | prometheus-client |
 
 ## Run locally
@@ -62,7 +64,7 @@ docker compose up --build -d
 docker compose ps                 # wait for STATUS "healthy"
 ```
 
-Open http://localhost:8000. The model is trained inside the image during the build, so no `.pkl` is committed.
+Open http://localhost:8000. During the build the image downloads two years of hourly history from Open-Meteo and trains the model, so no data or `.pkl` is committed. The build needs internet and fails if the model does not pass its quality gate.
 
 ### Without Docker
 
@@ -70,7 +72,8 @@ Open http://localhost:8000. The model is trained inside the image during the bui
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-python -m src.model.train         # creates rain_model.pkl
+python -m src.model.data          # downloads data/weather_history.csv from Open-Meteo
+python -m src.model.train         # creates rain_model.pkl and model_metrics.json
 $env:WEATHER_API_KEY = "your_key"
 uvicorn src.main:app --reload
 ```
@@ -89,20 +92,22 @@ docker compose config --quiet     # validates compose without printing your key
 flowchart LR
     PR[Pull request] --> L
     PM[Push to main] --> L
-    L[lint<br/>ruff] --> T[test<br/>pytest] --> B[build<br/>docker build]
+    L[lint<br/>ruff] --> T[test<br/>pytest + pip-audit] --> B[build<br/>docker build · trains model<br/>Trivy scan]
     B -->|push to main only| G[(GHCR<br/>:sha and :latest)]
     B -->|push to main only,<br/>after lint + test + build pass| R[deploy<br/>Render deploy hook]
-    S[Weekly schedule<br/>Mon 03:17 UTC] --> T2[test] --> RB[rebuild image without cache<br/>retrains model] --> G2[(GHCR<br/>:weekly-YYYYMMDD and :latest)]
+    S[Weekly schedule<br/>Mon 03:17 UTC] --> T2[test] --> RB[rebuild without cache<br/>fresh data · retrain · Trivy] --> G2[(GHCR<br/>:weekly-YYYYMMDD and :latest)] --> R2[deploy<br/>Render]
+    DB[Dependabot<br/>weekly] -.->|PRs for pip, actions, docker| PR
 ```
 
 - **`.github/workflows/ci.yml`**
   - Runs on every pull request and push to `main`, in the order lint → test → build.
-  - On a push to `main`, it also pushes the image to `ghcr.io/ujjwalraj1808/ai-weather-forecast-app`, tagged with the commit SHA and `latest`.
-  - Then it calls the Render deploy hook.
+  - `test` also runs `pip-audit` against `requirements.txt`, so a dependency with a known vulnerability fails the build.
+  - `build` builds the image (which downloads data and trains the model), then scans it with Trivy; any fixable CRITICAL or HIGH finding fails the build.
+  - On a push to `main`, it pushes the image to `ghcr.io/ujjwalraj1808/ai-weather-forecast-app` (tagged with the commit SHA and `latest`) and calls the Render deploy hook.
 - **`.github/workflows/weekly-retrain.yml`**
   - Runs every Monday, and can also be started by hand from the Actions tab.
-  - Runs the tests, then rebuilds the image without cache, which retrains the model from `weather.csv`, and pushes it to GHCR.
-  - Training is seeded, so the weekly model only changes when `weather.csv` changes.
+  - Rebuilds the image without cache, so the model is retrained on the latest two years of Open-Meteo data, prints the new scores, scans, pushes to GHCR and triggers a Render deploy.
+- **Supply chain:** every action is pinned to a full commit SHA, and Dependabot opens weekly PRs for Python packages, actions and the base image.
 
 ### One-time setup
 
@@ -122,6 +127,10 @@ flowchart LR
 | `PREFERRED_COUNTRY` | no | `India` | Tie-breaker when a bare city name matches places in several countries |
 | `PORT` | no | `8000` | Port the container listens on |
 | `MODEL_PATH` | no | `rain_model.pkl` | Where the model is saved and loaded |
+| `METRICS_PATH` | no | `model_metrics.json` | Model provenance and scores, served at `/model` |
+| `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client IP on the weather endpoints |
+| `MIN_ROC_AUC` | no | `0.65` | Training fails (and nothing deploys) if the held-out ROC AUC is below this |
+| `TRAINING_DATA_PATH` | no | `data/weather_history.csv` | Where `src.model.data` writes the downloaded history |
 
 Never commit `.env`; it is in `.gitignore` and `.dockerignore`.
 
@@ -131,11 +140,13 @@ Never commit `.env`; it is in `.gitignore` and `.dockerignore`.
 |---|---|
 | `GET /health` | Health check used by Docker's `HEALTHCHECK` |
 | `GET /metrics` | Prometheus metrics: `http_requests_total` and `http_request_duration_seconds`, labelled by method and route |
+| `GET /model` | How the model was trained (data range, cities, sample counts) and its held-out scores |
+| `GET /dashboard?city=&days=` | Current conditions, hourly, daily and the rain estimate from **one** WeatherAPI call (what the page uses) |
 | `GET /search?q=` | Place suggestions (id, name, region, country, lat, lon) |
 | `GET /resolve?q=` | Free text to one exact place (`409` with candidates if ambiguous) |
 | `GET /weather?city=` | Current conditions plus the background scene |
 | `GET /forecast?city=&days=` | Daily forecast (1–14 days) and the next 24 hours |
-| `GET /predict-rain?city=` | Experimental ML estimate for tomorrow |
+| `GET /predict-rain?city=` | ML rain estimate for tomorrow: `rain_expected` and `probability` |
 
 `city` accepts free text ("Delhi, India"), a place id from `/search` (`id:123`) or coordinates (`28.61,77.21`).
 
@@ -145,7 +156,7 @@ Error status codes:
 |---|---|
 | 404 | Place not found |
 | 409 | Several places match; the response lists them |
-| 429 | WeatherAPI quota or rate limit reached |
+| 429 | This app's per-IP rate limit (`Retry-After` header), or WeatherAPI's quota |
 | 502 | WeatherAPI error |
 | 503 | API key missing or rejected |
 | 504 | WeatherAPI timed out |
@@ -171,27 +182,35 @@ All requests for one search then use that place's id, so the weather, forecast a
 
 ## The ML estimate
 
-A decision tree (`src/model/train.py`) trained on `weather.csv` with two features, humidity and wind. `/predict-rain` feeds it the current humidity and wind. Training is seeded (`random_state=42`).
+**Question the model answers:** given the weather right now, will at least 1 mm of rain fall tomorrow (the next local calendar day)?
 
-Limitations:
-- The training data only has a weather label; humidity and wind are generated from the row number.
-- The label is the day's own weather, not the next day's.
-- The model has not been evaluated, so no accuracy is claimed.
+**Data:** `src/model/data.py` downloads two years of hourly observations for 12 cities with different climates (Delhi, Mumbai, Kolkata, Chennai, Bengaluru, Patna, London, Paris, Stockholm, New York, Singapore, Sydney) from the [Open-Meteo historical archive](https://open-meteo.com/en/docs/historical-weather-api) (ERA5 reanalysis, CC BY 4.0). Every third hour becomes one sample; its label is whether the following day's precipitation reached 1 mm.
 
-The UI labels it "experimental" and points to WeatherAPI's chance of rain for planning.
+**Features:** humidity, wind speed, temperature, sea-level pressure, cloud cover and the month (as sine/cosine). These are exactly the values WeatherAPI reports for current conditions, so the live app feeds the model the same kind of input it was trained on.
+
+**Model:** a scikit-learn random forest (`src/model/train.py`), class-balanced, with a fixed seed.
+
+**Honest evaluation:** the newest 20% of dates are held out, so the model is scored on weather it has never seen and on a later period than it trained on. The scores are written to `model_metrics.json` and served at `/model`; they also include the "always say no rain" baseline so the lift is visible. If the held-out ROC AUC is below `MIN_ROC_AUC`, training raises an error, the Docker build fails and nothing deploys.
+
+**Limits:** it uses one hour's conditions in one place, with no radar, no pressure trend and no forecast model behind it, so it will never match WeatherAPI's forecast. The page labels it as a separate estimate and points to WeatherAPI's chance of rain for planning.
 
 ## Project layout
 
 ```
 src/main.py              FastAPI app and endpoints
 src/metrics.py           Prometheus request metrics
-src/weather/client.py    WeatherAPI client, city choice, parsing, error mapping
+src/cache.py             In-memory TTL cache
+src/ratelimit.py         Per-IP rate limit middleware
+src/weather/client.py    WeatherAPI client, city choice, parsing, error mapping, caching
 src/weather/scenes.py    Condition -> background scene
-src/model/               Training and prediction
+src/model/data.py        Downloads and labels Open-Meteo history
+src/model/train.py       Trains, evaluates on held-out dates, quality gate
+src/model/predict.py     Builds features from live conditions and predicts
 static/                  index.html, app.js, style.css, fonts/, img/
-tests/                   pytest suite
-.github/workflows/       ci.yml, weekly-retrain.yml
-Dockerfile               Multi-stage image; trains the model at build time
+tests/                   pytest suite (no network)
+docs/screenshots/        Screenshots of the original desktop app
+.github/                 ci.yml, weekly-retrain.yml, dependabot.yml
+Dockerfile               Multi-stage image; downloads data and trains at build time
 docker-compose.yml       Local run, reads .env
 ```
 
