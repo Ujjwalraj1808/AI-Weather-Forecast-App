@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.env
+.ruff_cache
+.pytest_cache
+**/__pycache__
+build/
+dist/
+tests/
+*.pkl
+*.png
+*.ico
+*.spec
+CLAUDE.md
+README.md
+docker-compose.yml
