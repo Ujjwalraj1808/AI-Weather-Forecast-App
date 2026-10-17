@@ -7,8 +7,18 @@
 
 A containerised FastAPI web app showing live weather from [WeatherAPI.com](https://www.weatherapi.com/):
 current conditions, the next 24 hours, a multi-day forecast and an experimental ML rain estimate.
-It started as a Tkinter desktop app and was rebuilt as a tested, containerised and continuously deployed web service.
+Tested, containerised and continuously deployed: every push is linted, tested, security-scanned, built into a Docker image, pushed to GHCR and deployed to Render.
 The rain model is trained from two years of real hourly observations (Open-Meteo) every time the image is built, and its held-out scores are published at `/model`.
+
+## Screenshots
+
+| Dashboard | City search |
+|---|---|
+| ![Dashboard](docs/screenshots/web-dashboard.png) | ![City search](docs/screenshots/web-search.png) |
+
+| Forecast and ML rain estimate | Model scores (`/model`) |
+|---|---|
+| ![Forecast](docs/screenshots/web-forecast.png) | ![Model](docs/screenshots/web-model.png) |
 
 ## Architecture
 
@@ -208,20 +218,27 @@ src/model/train.py       Trains, evaluates on held-out dates, quality gate
 src/model/predict.py     Builds features from live conditions and predicts
 static/                  index.html, app.js, style.css, fonts/, img/
 tests/                   pytest suite (no network)
-docs/screenshots/        Screenshots of the original desktop app
+docs/screenshots/        Screenshots (web app, plus the original desktop version)
 .github/                 ci.yml, weekly-retrain.yml, dependabot.yml
 Dockerfile               Multi-stage image; downloads data and trains at build time
 docker-compose.yml       Local run, reads .env
 ```
 
-## Original desktop version
+## Project history
 
-The project began as a Tkinter desktop app (packaged as an .exe). Screenshots of that version are in [`docs/screenshots/`](docs/screenshots/):
+<details>
+<summary>Version 1 (archived): Tkinter desktop app</summary>
+
+The first version was a Python Tkinter desktop application packaged as a Windows .exe with PyInstaller.
+It had the API key hard-coded, no tests, no CI and a rain model trained on 20 invented rows.
+It was fully replaced by the web service above; these screenshots are kept only for reference.
 
 | | |
 |---|---|
 | ![Desktop app 1](docs/screenshots/desktop-app-1.png) | ![Desktop app 2](docs/screenshots/desktop-app-2.png) |
 | ![Desktop app 3](docs/screenshots/desktop-app-3.png) | ![Desktop app 4](docs/screenshots/desktop-app-4.png) |
+
+</details>
 
 ## Developed by
 
