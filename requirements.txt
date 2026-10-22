@@ -1,4 +1,4 @@
-fastapi==0.143.1
+fastapi==0.148.0
 joblib==1.6.0
 pandas==3.0.6
 prometheus-client==0.26.0
